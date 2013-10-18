@@ -83,7 +83,7 @@ function KeyManager(labels, $table) {
     var items = [];
     $headerRows.find('th').each(function(index, value) {
         var $headerColumn = $(this);
-        var label = $($headerColumn.find(':not(.F-icon)')).text();
+        var label = $($headerColumn.find('>:not(.F-icon)')).text();
 
         console.log(label, _.contains(labels, label), labels);
         if (_.contains(labels, label)) {
@@ -279,13 +279,13 @@ function getStats($table, keyManager) {
         var $bodyRow = $(this);
 
         $bodyRow.find('td').each(function(index, value) {
-            var $bodyColumn = $(this);
+            var $cell = $(this);
 
             var label = keyManager.getLabelFromIndex(index);
             if (label) {
                 var key = keyManager.getKey(label, index);
 
-                var unparsedValue = $bodyColumn.text();
+                var unparsedValue = $cell.text();
                 var parsedValue = (value === '-') ? 0 : parseNumber(unparsedValue);
 
                 if (!isNaN(parsedValue)) {

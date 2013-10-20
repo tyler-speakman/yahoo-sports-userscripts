@@ -130,7 +130,9 @@ function applyStatExtensions($table, statDefinitions) {
 
     // Add stat rows
     var $statTotalsRow = appendRow($table).attr('class', '').addClass('ysu stat stat-Total');
+    $statTotalsRow.find('td').removeClass('Bg-shade2');
     var $statAveragesRow = appendRow($table).attr('class', '').addClass('ysu stat stat-Average');
+    $statAveragesRow.find('td').removeClass('Bg-shade2');
 
     // Apply values to stat rows
     _(keyManager.getItems()).each(function(item, index) {
@@ -156,8 +158,8 @@ function applyStatExtensions($table, statDefinitions) {
     });
 
     // Apply labels to stat rows
-    $($statTotalsRow.find('td.Ta-start:visible')).html('Totals');
-    $($statAveragesRow.find('td.Ta-start:visible')).html('Averages');
+    $($statTotalsRow.find('td.Ta-start:visible:first')).html('Totals');
+    $($statAveragesRow.find('td.Ta-start:visible:first')).html('Averages');
 
     // Add stat highlights
     var applyHighlightQueue = async.queue(applyHighlightToCell, 10);
@@ -332,8 +334,9 @@ function KeyManager(labels, $table) {
     // Initialize labels and indices
     var items = [];
     $headerRows.find('th').each(function(index, value) {
-        var $headerColumn = $(this);
-        var label = $($headerColumn.find('>:not(.F-icon)')).text();
+        var $headerCell = $(this);
+        debugger;
+        var label = $headerCell.attr('title');
 
         console.log(label, _.contains(labels, label), labels);
         if (_.contains(labels, label)) {

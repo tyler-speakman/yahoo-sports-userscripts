@@ -47,128 +47,58 @@ var STAT_DEFINITIONS = {
         'SHO': +1
     }
 };
-
 var targets = [
     // "Players List" page
     {
-        selector: '#players-table table',
-        stats: STAT_DEFINITIONS.UTILS
-    },
-    // "Matchup" page, utils
-    {
-        selector: '#statTable3',
+        selector: '#statTable0,#statTable3,#players-table table',
         stats: STAT_DEFINITIONS.UTILS
     },
     // "Matchup" page, goalies
     {
-        selector: '#statTable5',
-        stats: STAT_DEFINITIONS.GOALIES
-    },
-    // "My Team" page, utils
-    {
-        selector: '#statTable0',
-        stats: STAT_DEFINITIONS.UTILS
-    },
-    // "My Team" page, goalies
-    {
-        selector: '#statTable1',
+        selector: '#statTable5,#statTable1',
         stats: STAT_DEFINITIONS.GOALIES
     }
 ];
-
-function KeyManager(labels, $table) {
-    var $headerRows = $table.find('thead>tr:last');
-
-    // Initialize labels and indices
-    var items = [];
-    $headerRows.find('th').each(function(index, value) {
-        var $headerColumn = $(this);
-        var label = $($headerColumn.find('>:not(.F-icon)')).text();
-
-        console.log(label, _.contains(labels, label), labels);
-        if (_.contains(labels, label)) {
-            items.push(new Item(label, index));
-        }
-    });
-
-    var getItems = function() {
-        return items;
-    }
-
-    // var getKeys = function() {
-    //     return _.map(items, function(item, index, list) {
-    //         return item.key;
-    //     });
-    // };
-
-    // var getLabels = function() {
-    //     return _.map(items, function(item, index, list) {
-    //         return item.label;
-    //     });
-    // };
-
-    // var getIndices = function() {
-    //     return _.map(items, function(item, index, list) {
-    //         return item.index;
-    //     });
-    // };
-
-    var getLabelFromIndex = function(index) {
-        var targetItem = _.find(items, function(item, key, list) {
-            return item.index === index;
-        });
-
-        if (targetItem === undefined) {
-            return undefined;
-        }
-
-        return targetItem.label;
-    };
-
-    var getIndexFromKey = function(key) {
-        var targetItem = _.find(items, function(item, key, list) {
-            return item.key === key;
-        });
-
-        if (targetItem === undefined) {
-            return undefined;
-        }
-
-        return targetItem.index;
-    };
-
-    var getKey = function(label, index) {
-        return label + index;
-    };
-
-    return {
-        // getIndices: getIndices,
-        // getLabels: getLabels,
-        // getKeys: getKeys,
-        getItems: getItems,
-        getLabelFromIndex: getLabelFromIndex,
-        getIndexFromKey: getIndexFromKey,
-        getKey: getKey
-    };
-
-
-
-    function Item(label, index) {
-        this.label = label;
-        this.index = index;
-        this.key = label + index;
-    }
-}
+// var targets = [
+//     // "Players List" page
+//     {
+//         selector: '#players-table table',
+//         stats: STAT_DEFINITIONS.UTILS
+//     },
+//     // "Matchup" page, utils
+//     {
+//         selector: '#statTable3',
+//         stats: STAT_DEFINITIONS.UTILS
+//     },
+//     // "Matchup" page, goalies
+//     {
+//         selector: '#statTable5',
+//         stats: STAT_DEFINITIONS.GOALIES
+//     },
+//     // "My Team" page, utils
+//     {
+//         selector: '#statTable0',
+//         stats: STAT_DEFINITIONS.UTILS
+//     },
+//     // "My Team" page, goalies
+//     {
+//         selector: '#statTable1',
+//         stats: STAT_DEFINITIONS.GOALIES
+//     }
+// ];
 
 tryLoading();
 
 function tryLoading() {
-    var isReady = (undefined !== _.find(targets, function(value, index, list) {
+    var hasTargets = (undefined !== _.find(targets, function(value, index, list) {
         return $(value.selector, window.parent.document).length > 0;
     }));
+    var hasAlreadyLoaded = $('#ysu-is-loaded', window.parent.document).length > 0;
+    var isReady = hasTargets && !hasAlreadyLoaded;
 
     if (isReady) {
         main();
+        $('body', window.parent.document).append('<div id="ysu-is-loaded" class="ysu"/>')
     } else {
         setTimeout(tryLoading, 1000);
     }
@@ -188,7 +118,6 @@ function main() {
 }
 
 
-
 function applyStatExtensions($table, statDefinitions) {
     console.log('applyStatExtensions()', arguments);
 
@@ -197,37 +126,53 @@ function applyStatExtensions($table, statDefinitions) {
 
     // Get stats
     var stats = getStats($table, keyManager);
+    console.log('applyStatExtensions()', stats)
 
     // Add stat rows
-    var $statTotalsRow = appendRow($table).attr('class', '').addClass('stat stat-Total');
-    var $statAveragesRow = appendRow($table).attr('class', '').addClass('stat stat-Average');
+    var $statTotalsRow = appendRow($table).attr('class', '').addClass('ysu stat stat-Total');
+    var $statAveragesRow = appendRow($table).attr('class', '').addClass('ysu stat stat-Average');
 
     // Apply values to stat rows
     _(keyManager.getItems()).each(function(item, index) {
-        $($statTotalsRow.find('td').get(item.index)).text(stats.totals[item.key]);
-        $($statAveragesRow.find('td').get(item.index)).text(stats.averages[item.key]);
+        var $statCell = $('<small class="ysu"></small>');
+
+        console.log('applyStatExtensions()', 'keyManager.getItems().each()', arguments, item.key);
+
+        // Set stat value
+        var statTotalValue = formatValue(stats.totals[item.key]);
+        $($statTotalsRow.find('td').get(item.index)).html($statCell.clone(true).text(statTotalValue));
+
+        // Set stat average value
+        var statAverageValue = formatValue(stats.averages[item.key]);
+        $($statAveragesRow.find('td').get(item.index)).html($statCell.clone(true).text(statAverageValue));
+
+        function formatValue(value) {
+            if (value.toFixed) {
+                return value.toFixed(1).replace(/(.*)\.0/gi, '$1')
+            }
+
+            return value;
+        }
     });
 
     // Apply labels to stat rows
-    $($statTotalsRow.find('td.player')).html('Totals');
-    $($statAveragesRow.find('td.player')).html('Averages');
+    $($statTotalsRow.find('td.Ta-start:visible')).html('Totals');
+    $($statAveragesRow.find('td.Ta-start:visible')).html('Averages');
 
     // Add stat highlights
     var applyHighlightQueue = async.queue(applyHighlightToCell, 10);
-    var $bodyRows = $table.find('tbody>tr').filter(':visible').filter(':not(.stat)');
+    var $bodyRows = $table.find('tbody>tr:visible:not(.stat)');
     $bodyRows.each(function() {
         var $bodyRow = $(this);
 
         $bodyRow.find('td').each(function(index, value) {
-            applyHighlightQueue.push(value);
+            applyHighlightQueue.push($(value));
         });
     });
 
     console.log('stats', stats);
 
-    function applyHighlightToCell(cell, callback) {
-        var $cell = $(cell);
-
+    function applyHighlightToCell($cell, callback) {
         var index = $cell.index();
         var label = keyManager.getLabelFromIndex(index);
 
@@ -242,24 +187,26 @@ function applyStatExtensions($table, statDefinitions) {
                 var percentileValue = (parsedValue - stats.minimums[key]) / valueRange;
 
                 // Invert the percentile, if this stat ranks in ascending order (as opposed to descending order)
-                if (statDefinitions[key] < 0) {
+                if (statDefinitions[label] < 0) {
                     percentileValue = 1 - percentileValue;
                 }
 
                 // Apply highlights
+                var $cellHighlight = $('<span class="ysu label">' + value + '</span>');
                 if (percentileValue < 0.17) {
-                    $cell.html('<span class="label label-danger">' + value + '</span>');
+                    $cellHighlight.addClass('label-danger');
                 } else if (percentileValue < 0.34) {
-                    $cell.html('<span class="label label-warning">' + value + '</span>');
+                    $cellHighlight.addClass('label-warning');
                 } else if (percentileValue < 0.51) {
-                    $cell.html('<span class="label label-default">' + value + '</span>');
+                    $cellHighlight.addClass('label-default');
                 } else if (percentileValue < 0.65) {
-                    $cell.html('<span class="label label-primary">' + value + '</span>');
+                    $cellHighlight.addClass('label-primary');
                 } else if (percentileValue < 0.79) {
-                    $cell.html('<span class="label label-info">' + value + '</span>');
+                    $cellHighlight.addClass('label-info');
                 } else {
-                    $cell.html('<span class="label label-success">' + value + '</span>');
+                    $cellHighlight.addClass('label-success');
                 }
+                $cell.html($cellHighlight);
             }
         }
 
@@ -291,19 +238,19 @@ function getStats($table, keyManager) {
                 if (!isNaN(parsedValue)) {
 
                     // Update stat totals
-                    statTotals[key] = statTotals[key] || 0;
+                    statTotals[key] = _.isNumber(statTotals[key]) ? statTotals[key] : 0;
                     statTotals[key] += parsedValue;
 
                     // Update stat minimums
-                    statMinimums[key] = statMinimums[key] || 0;
+                    statMinimums[key] = _.isNumber(statMinimums[key]) ? statMinimums[key] : 0;
                     statMinimums[key] = Math.min(statMinimums[key], parsedValue);
 
                     // Update stat maximums
-                    statMaximums[key] = statMaximums[key] || 0;
+                    statMaximums[key] = _.isNumber(statMaximums[key]) ? statMaximums[key] : 0;
                     statMaximums[key] = Math.max(statMaximums[key], parsedValue);
 
                     // Update stat counts
-                    statCounts[key] = statCounts[key] || 0;
+                    statCounts[key] = _.isNumber(statCounts[key]) ? statCounts[key] : 0;
                     statCounts[key] = statCounts[key] + 1;
                 }
                 console.log(label, value, parsedValue);
@@ -314,7 +261,18 @@ function getStats($table, keyManager) {
     // Get stat averages
     var statAverages = {};
     _.each(statTotals, function(value, index, list) {
-        statAverages[index] = Math.round(value / statCounts[index] * 100) / 100;
+        statAverages[index] = value / statCounts[index];
+    });
+
+
+    // Set fallback value for all keys on all stats
+    _.each(keyManager.getItems(), function(item, index, list) {
+        console.log('getStats()', 'keyManager.getItems().each()', arguments, item.key);
+        statTotals[item.key] = _.isNumber(statTotals[item.key]) ? statTotals[item.key] : '-';
+        statMinimums[item.key] = _.isNumber(statMinimums[item.key]) ? statMinimums[item.key] : '-';
+        statMaximums[item.key] = _.isNumber(statMaximums[item.key]) ? statMaximums[item.key] : '-';
+        statCounts[item.key] = _.isNumber(statCounts[item.key]) ? statCounts[item.key] : '-';
+        statAverages[item.key] = _.isNumber(statAverages[item.key]) ? statAverages[item.key] : '-';
     });
 
     return {
@@ -333,6 +291,7 @@ function parseNumber(unparsedNumber) {
     // return isNaN(parsedNumber) ? 0 : parsedNumber;
     return parsedNumber;
 }
+
 
 function appendRow($table) {
     console.log('appendRow()', arguments, $table.find('tbody>tr').length);
@@ -362,5 +321,70 @@ function addGlobalStyle(css) {
             document.createStyleSheet();
         }
         document.styleSheets[0].cssText += css;
+    }
+}
+
+
+
+function KeyManager(labels, $table) {
+    var $headerRows = $table.find('thead>tr:last');
+
+    // Initialize labels and indices
+    var items = [];
+    $headerRows.find('th').each(function(index, value) {
+        var $headerColumn = $(this);
+        var label = $($headerColumn.find('>:not(.F-icon)')).text();
+
+        console.log(label, _.contains(labels, label), labels);
+        if (_.contains(labels, label)) {
+            items.push(new Item(label, index));
+        }
+    });
+
+    var getItems = function() {
+        return items;
+    }
+
+    var getLabelFromIndex = function(index) {
+        var targetItem = _.find(items, function(item, key, list) {
+            return item.index === index;
+        });
+
+        if (targetItem === undefined) {
+            return undefined;
+        }
+
+        return targetItem.label;
+    };
+
+    var getIndexFromKey = function(key) {
+        var targetItem = _.find(items, function(item, key, list) {
+            return item.key === key;
+        });
+
+        if (targetItem === undefined) {
+            return undefined;
+        }
+
+        return targetItem.index;
+    };
+
+    var getKey = function(label, index) {
+        return label + index;
+    };
+
+    return {
+        getItems: getItems,
+        getLabelFromIndex: getLabelFromIndex,
+        getIndexFromKey: getIndexFromKey,
+        getKey: getKey
+    };
+
+
+
+    function Item(label, index) {
+        this.label = label;
+        this.index = index;
+        this.key = label + index;
     }
 }

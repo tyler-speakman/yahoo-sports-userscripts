@@ -47,6 +47,9 @@ var STAT_DEFINITIONS = {
         'SHO': +1
     }
 };
+/**
+ * Defines the target tables for stat-exentsions
+ */
 var targets = [
     // "Players List" page
     {
@@ -59,50 +62,68 @@ var targets = [
         stats: STAT_DEFINITIONS.GOALIES
     }
 ];
-// var targets = [
-//     // "Players List" page
-//     {
-//         selector: '#players-table table',
-//         stats: STAT_DEFINITIONS.UTILS
-//     },
-//     // "Matchup" page, utils
-//     {
-//         selector: '#statTable3',
-//         stats: STAT_DEFINITIONS.UTILS
-//     },
-//     // "Matchup" page, goalies
-//     {
-//         selector: '#statTable5',
-//         stats: STAT_DEFINITIONS.GOALIES
-//     },
-//     // "My Team" page, utils
-//     {
-//         selector: '#statTable0',
-//         stats: STAT_DEFINITIONS.UTILS
-//     },
-//     // "My Team" page, goalies
-//     {
-//         selector: '#statTable1',
-//         stats: STAT_DEFINITIONS.GOALIES
+
+
+
+// YUI().use('event-base', function(Y) {
+//     console.log("YUI().use('event-base')", arguments);
+
+//     Y.on('domready', function() {
+//         console.log('domready')
+//     });
+
+//     Y.on('contentready', function() {
+//         console.log('contentready')
+//     });
+
+//     Y.on('available', function() {
+//         console.log('available')
+//     });
+// });
+
+// $(window.parent.document).ready(function() {
+//     console.log('$(window.parent.document).ready()', arguments);
+
+//tryLoading();
+// })
+// $(window.top.document).on('mousedown', function() {
+//     console.log('mousedown', arguments);
+
+//     var isPlayerNoteClick = $(arguments[0].target).filter('a.playernote').length > 0;
+//     if (isPlayerNoteClick) {
+//         $('body', window.parent.document).append('<div id="ysu-is-loaded" class="ysu"/>');
 //     }
-// ];
+//     return true;
+// });
 
 tryLoading();
 
 function tryLoading() {
+    console.log('tryLoading()', arguments);
+
     var hasTargets = (undefined !== _.find(targets, function(value, index, list) {
         return $(value.selector, window.parent.document).length > 0;
     }));
     var hasAlreadyLoaded = $('#ysu-is-loaded', window.parent.document).length > 0;
-    var isReady = hasTargets && !hasAlreadyLoaded;
+    // var isReady = hasTargets && !hasAlreadyLoaded;
+    // var isFrameElement = !! frameElement;
+    // var isTopWindow = window.top === window.self;
 
-    if (isReady) {
-        main();
-        $('body', window.parent.document).append('<div id="ysu-is-loaded" class="ysu"/>')
+    // console.log('tryLoading()', hasTargets, hasAlreadyLoaded, isFrameElement, isTopWindow);
+
+    if (hasTargets) {
+        if (hasAlreadyLoaded) {
+            $('body', window.parent.document).remove('#ysu-is-loaded');
+        } else {
+            main();
+        }
+        // $('body', window.parent.document).append('<div id="ysu-is-loaded" class="ysu"/>');
     } else {
-        setTimeout(tryLoading, 1000);
+        setTimeout(tryLoading, 5000);
     }
 }
+
+
 
 function main() {
     console.log('main()', arguments);
@@ -110,8 +131,8 @@ function main() {
     addGlobalStyle(CSS.BOOTSTRAPPER.LABELS);
     addGlobalStyle(CSS.COLUMN_HIGHLIGHTER);
 
-    _.each(targets, function(value, index, list) {
-        applyStatExtensions($(value.selector, window.parent.document), value.stats);
+    _.each(targets, function(target, index, list) {
+        applyStatExtensions($(target.selector, window.parent.document), target.stats);
     });
 
     console.log('main()', 'END');
@@ -122,44 +143,48 @@ function applyStatExtensions($table, statDefinitions) {
     console.log('applyStatExtensions()', arguments);
 
     var statLabels = _.keys(statDefinitions);
-    var keyManager = new KeyManager(statLabels, $table);
+    var columnManager = new ColumnManager(statLabels, $table);
 
     // Get stats
-    var stats = getStats($table, keyManager);
-    console.log('applyStatExtensions()', stats)
+    var stats = getStats($table, columnManager);
+    console.log('applyStatExtensions()', stats);
 
     // Add stat rows
-    var $statTotalsRow = appendRow($table).attr('class', '').addClass('ysu stat stat-Total');
-    $statTotalsRow.find('td').removeClass('Bg-shade2');
-    var $statAveragesRow = appendRow($table).attr('class', '').addClass('ysu stat stat-Average');
-    $statAveragesRow.find('td').removeClass('Bg-shade2');
+    var $statCellTemplate = $('<small class="ysu"></small>');
+    _.each(stats, function(value, key, list) {
+        var statType = key;
+        var $statRow = appendRow($table).addClass('ysu stat');
+        $statRow.find('td').removeClass('Bg-shade2');
 
-    // Apply values to stat rows
-    _(keyManager.getItems()).each(function(item, index) {
-        var $statCell = $('<small class="ysu"></small>');
+        // Apply label to stat row
+        $statRow.find('td.Ta-start:visible:first').text(key);
 
-        console.log('applyStatExtensions()', 'keyManager.getItems().each()', arguments, item.key);
+        // Apply values to stat row
+        _(columnManager.getItems()).each(function(item, index) {
+            console.log('applyStatExtensions()', 'columnManager.getItems().each()', arguments, item.key);
+            var columnKey = item.key;
+            var columnIndex = item.index;
 
-        // Set stat value
-        var statTotalValue = formatValue(stats.totals[item.key]);
-        $($statTotalsRow.find('td').get(item.index)).html($statCell.clone(true).text(statTotalValue));
+            var statValue = formatValue(stats[statType][columnKey]);
+            var $statCell = $($statRow.find('td').get(columnIndex));
+            $statCell.html($statCellTemplate.clone(true).text(statValue));
 
-        // Set stat average value
-        var statAverageValue = formatValue(stats.averages[item.key]);
-        $($statAveragesRow.find('td').get(item.index)).html($statCell.clone(true).text(statAverageValue));
+            /**
+             * Formats a number value to a single decimal. If the decimal is zero, then it is removed.
+             * @param  {number} value A number.
+             * @return {string}       A formatted string representation of the number.
+             */
 
-        function formatValue(value) {
-            if (value.toFixed) {
-                return value.toFixed(1).replace(/(.*)\.0/gi, '$1')
+            function formatValue(value) {
+                if (value.toFixed) {
+                    return value.toFixed(1).replace(/(.*)\.0/gi, '$1');
+                }
+
+                return value;
             }
+        });
 
-            return value;
-        }
     });
-
-    // Apply labels to stat rows
-    $($statTotalsRow.find('td.Ta-start:visible:first')).html('Totals');
-    $($statAveragesRow.find('td.Ta-start:visible:first')).html('Averages');
 
     // Add stat highlights
     var applyHighlightQueue = async.queue(applyHighlightToCell, 10);
@@ -175,38 +200,47 @@ function applyStatExtensions($table, statDefinitions) {
     console.log('stats', stats);
 
     function applyHighlightToCell($cell, callback) {
-        var index = $cell.index();
-        var label = keyManager.getLabelFromIndex(index);
+        var columnIndex = $cell.index();
+        var columnLabel = columnManager.getLabelFromIndex(columnIndex);
 
-        if (label) {
-            var key = keyManager.getKey(label, index);
+        if (columnLabel) {
+            var columnKey = columnManager.getKey(columnLabel, columnIndex);
 
-            var value = $cell.text();
-
-            var parsedValue = parseNumber(value);
+            var unparsedValue = $cell.text();
+            var parsedValue = parseNumber(unparsedValue);
             if (!isNaN(parsedValue)) {
-                var valueRange = stats.maximums[key] - stats.minimums[key];
-                var percentileValue = (parsedValue - stats.minimums[key]) / valueRange;
+
+                // Calculate percentile value (there has to be a better way to do this..)
+                var percentileValue;
+                if (parsedValue < stats.averages[columnKey]) {
+                    percentileValue = ((parsedValue - stats.minimums[columnKey]) / (stats.averages[columnKey] - stats.minimums[columnKey])) / 2;
+                } else if (parsedValue > stats.averages[columnKey]) {
+                    percentileValue = ((parsedValue - stats.averages[columnKey]) / (stats.maximums[columnKey] - stats.averages[columnKey])) / 2 + 0.5;
+                } else {
+                    percentileValue = 0.5;
+                }
 
                 // Invert the percentile, if this stat ranks in ascending order (as opposed to descending order)
-                if (statDefinitions[label] < 0) {
+                if (statDefinitions[columnLabel] < 0) {
                     percentileValue = 1 - percentileValue;
                 }
 
                 // Apply highlights
-                var $cellHighlight = $('<span class="ysu label">' + value + '</span>');
-                if (percentileValue < 0.17) {
+                var $cellHighlight = $('<span class="ysu label">' + unparsedValue + '</span>');
+                if (percentileValue < 1 / 6) {
                     $cellHighlight.addClass('label-danger');
-                } else if (percentileValue < 0.34) {
+                } else if (percentileValue < 2 / 6) {
                     $cellHighlight.addClass('label-warning');
-                } else if (percentileValue < 0.51) {
+                } else if (percentileValue < 3 / 6 - 1 / 100) {
                     $cellHighlight.addClass('label-default');
-                } else if (percentileValue < 0.65) {
+                } else if (percentileValue > 5 / 6) {
+                    $cellHighlight.addClass('label-success');
+                } else if (percentileValue > 4 / 6) {
                     $cellHighlight.addClass('label-primary');
-                } else if (percentileValue < 0.79) {
+                } else if (percentileValue > 3 / 6 + 1 / 100) {
                     $cellHighlight.addClass('label-info');
                 } else {
-                    $cellHighlight.addClass('label-success');
+                    // Do nothing
                 }
                 $cell.html($cellHighlight);
             }
@@ -217,7 +251,7 @@ function applyStatExtensions($table, statDefinitions) {
     }
 }
 
-function getStats($table, keyManager) {
+function getStats($table, columnManager) {
     console.log('getStats()', arguments);
 
     var $bodyRows = $table.find('tbody>tr');
@@ -228,11 +262,12 @@ function getStats($table, keyManager) {
         var $bodyRow = $(this);
 
         $bodyRow.find('td').each(function(index, value) {
+            var columnIndex = index;
             var $cell = $(this);
 
-            var label = keyManager.getLabelFromIndex(index);
-            if (label) {
-                var key = keyManager.getKey(label, index);
+            var columnLabel = columnManager.getLabelFromIndex(columnIndex);
+            if (columnLabel) {
+                var columnKey = columnManager.getKey(columnLabel, columnIndex);
 
                 var unparsedValue = $cell.text();
                 var parsedValue = (value === '-') ? 0 : parseNumber(unparsedValue);
@@ -240,22 +275,22 @@ function getStats($table, keyManager) {
                 if (!isNaN(parsedValue)) {
 
                     // Update stat totals
-                    statTotals[key] = _.isNumber(statTotals[key]) ? statTotals[key] : 0;
-                    statTotals[key] += parsedValue;
+                    statTotals[columnKey] = _.isNumber(statTotals[columnKey]) ? statTotals[columnKey] : 0;
+                    statTotals[columnKey] += parsedValue;
 
                     // Update stat minimums
-                    statMinimums[key] = _.isNumber(statMinimums[key]) ? statMinimums[key] : 0;
-                    statMinimums[key] = Math.min(statMinimums[key], parsedValue);
+                    statMinimums[columnKey] = _.isNumber(statMinimums[columnKey]) ? statMinimums[columnKey] : Number.MAX_VALUE;
+                    statMinimums[columnKey] = Math.min(statMinimums[columnKey], parsedValue);
 
                     // Update stat maximums
-                    statMaximums[key] = _.isNumber(statMaximums[key]) ? statMaximums[key] : 0;
-                    statMaximums[key] = Math.max(statMaximums[key], parsedValue);
+                    statMaximums[columnKey] = _.isNumber(statMaximums[columnKey]) ? statMaximums[columnKey] : Number.MIN_VALUE;
+                    statMaximums[columnKey] = Math.max(statMaximums[columnKey], parsedValue);
 
                     // Update stat counts
-                    statCounts[key] = _.isNumber(statCounts[key]) ? statCounts[key] : 0;
-                    statCounts[key] = statCounts[key] + 1;
+                    statCounts[columnKey] = _.isNumber(statCounts[columnKey]) ? statCounts[columnKey] : 0;
+                    statCounts[columnKey] = statCounts[columnKey] + 1;
                 }
-                console.log(label, value, parsedValue);
+                console.log(columnLabel, value, parsedValue);
             }
         });
     });
@@ -268,8 +303,8 @@ function getStats($table, keyManager) {
 
 
     // Set fallback value for all keys on all stats
-    _.each(keyManager.getItems(), function(item, index, list) {
-        console.log('getStats()', 'keyManager.getItems().each()', arguments, item.key);
+    _.each(columnManager.getItems(), function(item, index, list) {
+        console.log('getStats()', 'columnManager.getItems().each()', arguments, item.key);
         statTotals[item.key] = _.isNumber(statTotals[item.key]) ? statTotals[item.key] : '-';
         statMinimums[item.key] = _.isNumber(statMinimums[item.key]) ? statMinimums[item.key] : '-';
         statMaximums[item.key] = _.isNumber(statMaximums[item.key]) ? statMaximums[item.key] : '-';
@@ -281,7 +316,8 @@ function getStats($table, keyManager) {
         'averages': statAverages,
         'totals': statTotals,
         'minimums': statMinimums,
-        'maximums': statMaximums
+        'maximums': statMaximums //,
+        //'counts': statCounts
     };
 }
 
@@ -294,19 +330,23 @@ function parseNumber(unparsedNumber) {
     return parsedNumber;
 }
 
+/**
+ * Appends a row to a table.
+ * @param  {jQuery element} $table An HTML table element with jQuery wrapper.
+ * @return {jQuery element}        An HTML row element with jQuery wrapper.
+ */
 
 function appendRow($table) {
     console.log('appendRow()', arguments, $table.find('tbody>tr').length);
 
     var $oldRow = $table.find('tbody>tr:last');
-    var $newRow = $oldRow.clone(true);
-    //console.log($newRow.find('td:text'));
+    var $newRow = $oldRow.clone(true); //.attr('class', '');
+
     $newRow.find('td').html('');
     $newRow.insertAfter($oldRow);
 
     return $newRow;
 }
-
 
 function addGlobalStyle(css) {
     console.log('addGlobalStyle()', arguments);
@@ -327,26 +367,32 @@ function addGlobalStyle(css) {
 }
 
 
+/**
+ * Given a table an a collection of target label (i.e., column headers), this
+ * object correlates column labels with column indices. It also produces a
+ * series unique keys.
+ * @param {string[]}        labels An array of labels (i.e., column headers).
+ * @param {jQuery element}  $table $table An HTML table element with jQuery wrapper.
+ */
 
-function KeyManager(labels, $table) {
+function ColumnManager(labels, $table) {
     var $headerRows = $table.find('thead>tr:last');
 
     // Initialize labels and indices
     var items = [];
     $headerRows.find('th').each(function(index, value) {
         var $headerCell = $(this);
-        debugger;
-        var label = $headerCell.attr('title');
 
-        console.log(label, _.contains(labels, label), labels);
-        if (_.contains(labels, label)) {
-            items.push(new Item(label, index));
+        var columnLabel = $headerCell.attr('title');
+
+        if (_.contains(labels, columnLabel)) {
+            items.push(new Item(columnLabel, index));
         }
     });
 
     var getItems = function() {
         return items;
-    }
+    };
 
     var getLabelFromIndex = function(index) {
         var targetItem = _.find(items, function(item, key, list) {

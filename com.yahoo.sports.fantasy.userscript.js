@@ -18,12 +18,14 @@
 var CSS = {
     BOOTSTRAPPER: {
         LABELS: '.label {  display: inline;  padding: .2em .6em .3em;  font-size: 75%;  font-weight: bold;  line-height: 1;  color: #ffffff;  text-align: center;  white-space: nowrap;  vertical-align: baseline;  border-radius: .25em;}.label[href]:hover,.label[href]:focus {  color: #ffffff;  text-decoration: none;  cursor: pointer;}.label:empty {  display: none;}.label-default {  background-color: #999999;}.label-default[href]:hover,.label-default[href]:focus {  background-color: #808080;}.label-primary {  background-color: #428bca;}.label-primary[href]:hover,.label-primary[href]:focus {  background-color: #3071a9;}.label-success {  background-color: #5cb85c;}.label-success[href]:hover,.label-success[href]:focus {  background-color: #449d44;}.label-info {  background-color: #5bc0de;}.label-info[href]:hover,.label-info[href]:focus {  background-color: #31b0d5;}.label-warning {  background-color: #f0ad4e;}.label-warning[href]:hover,.label-warning[href]:focus {  background-color: #ec971f;}.label-danger {  background-color: #d9534f;}.label-danger[href]:hover,.label-danger[href]:focus {  background-color: #c9302c;}'
-    },
-    COLUMN_HIGHLIGHTER: 'table#statTable0, table#statTable1 {    border-spacing: 0;    border-collapse: collapse;    overflow: hidden;    z-index: 1;}table#statTable0 td, table#statTable0 th, table#statTable1 td, table#statTable1 th {    cursor: pointer;    padding: 10px;    position: relative;}'
+    }
+    // ,
+    // COLUMN_HIGHLIGHTER: 'table#statTable0, table#statTable1 {    border-spacing: 0;    border-collapse: collapse;    overflow: hidden;    z-index: 1;}table#statTable0 td, table#statTable0 th, table#statTable1 td, table#statTable1 th {    cursor: pointer;    padding: 10px;    position: relative;}'
 };
 
 var STAT_DEFINITIONS = {
     UTILS: {
+        '% Owned': +1,
         'O-Rank': -1,
         'Rank': -1,
         'Goals': +1,
@@ -37,6 +39,7 @@ var STAT_DEFINITIONS = {
         'Blocks': +1
     },
     GOALIES: {
+        '% Owned': +1,
         'O-Rank': -1,
         'Rank': -1,
         'Wins': +1,
@@ -123,6 +126,7 @@ function applyStatExtensions($table, statDefinitions) {
     var stats = getStats($table, columnManager);
     console.log('applyStatExtensions()', stats);
 
+    //
     // Add stat rows
     var $statCellTemplate = $('<small class="ysu"></small>');
     _.each(stats, function(value, key, list) {
@@ -140,7 +144,7 @@ function applyStatExtensions($table, statDefinitions) {
             var columnIndex = item.index;
 
             var statValue = formatValue(stats[statType][columnKey]);
-            var $statCell = $($statRow.find('td').get(columnIndex));
+            var $statCell = $statRow.find('td:eq(' + columnIndex + ')');
             $statCell.html($statCellTemplate.clone(true).text(statValue));
 
             /**
@@ -157,12 +161,12 @@ function applyStatExtensions($table, statDefinitions) {
                 return value;
             }
         });
-
     });
 
+    //
     // Add stat highlights
     var applyHighlightQueue = async.queue(applyHighlightToCell, 10);
-    var $bodyRows = $table.find('tbody>tr:visible:not(.stat)');
+    var $bodyRows = $table.find('tbody>tr:visible:not(.ysu)');
     $bodyRows.each(function() {
         var $bodyRow = $(this);
 
@@ -170,6 +174,44 @@ function applyStatExtensions($table, statDefinitions) {
             applyHighlightQueue.push($(value));
         });
     });
+
+    //
+    // Add rank ratios
+    var columns = columnManager.getItems();
+    var ownershipColumn =
+        _.findWhere(columns, {
+            label: '% Owned'
+        });
+    var oRankColumn =
+        _.findWhere(columns, {
+            label: 'O-Rank'
+        });
+    var rankColumn =
+        _.findWhere(columns, {
+            label: 'Rank'
+        });
+    if (ownershipColumn && oRankColumn && rankColumn) {
+        var $performanceRatioLabel = $('<sup class="ysu"></sup>');
+        $bodyRows.each(function() {
+            var $bodyRow = $(this);
+
+            var ownershipValue = parseNumber($bodyRow.find('td:eq(' + ownershipColumn.index + ')').text());
+            var oRankValue = parseNumber($bodyRow.find('td:eq(' + oRankColumn.index + ')').text());
+            var rankValue = parseNumber($bodyRow.find('td:eq(' + rankColumn.index + ')').text());
+
+            // If any of the values aren't numbers, then exit
+            if (isNaN(ownershipValue) || isNaN(oRankValue) || isNaN(rankValue)) {
+                // Exit
+                return;
+            }
+
+            var performanceRatio = oRankValue / rankValue;
+            var confidenceRatio = performanceRatio * (ownershipValue / 100);
+
+            $bodyRow.find('td.Ta-start:visible:first .ysf-player-name')
+                .append($performanceRatioLabel.clone(true).text(confidenceRatio.toFixed(1) + ' / ' + performanceRatio.toFixed(1)));
+        });
+    }
 
     console.log('stats', stats);
 
@@ -182,46 +224,69 @@ function applyStatExtensions($table, statDefinitions) {
 
             var unparsedValue = $cell.text();
             var parsedValue = parseNumber(unparsedValue);
-            if (!isNaN(parsedValue)) {
 
-                // Calculate percentile value (there has to be a better way to do this..)
-                var percentileValue;
-                if (parsedValue < stats.averages[columnKey]) {
-                    percentileValue = ((parsedValue - stats.minimums[columnKey]) / (stats.averages[columnKey] - stats.minimums[columnKey])) / 2;
-                } else if (parsedValue > stats.averages[columnKey]) {
-                    percentileValue = ((parsedValue - stats.averages[columnKey]) / (stats.maximums[columnKey] - stats.averages[columnKey])) / 2 + 0.5;
-                } else {
-                    percentileValue = 0.5;
-                }
-
-                // Invert the percentile, if this stat ranks in ascending order (as opposed to descending order)
-                if (statDefinitions[columnLabel] < 0) {
-                    percentileValue = 1 - percentileValue;
-                }
-
-                // Apply highlights
-                var $cellHighlight = $('<span class="ysu label">' + unparsedValue + '</span>');
-                if (percentileValue < 1 / 6) {
-                    $cellHighlight.addClass('label-danger');
-                } else if (percentileValue < 2 / 6) {
-                    $cellHighlight.addClass('label-warning');
-                } else if (percentileValue < 3 / 6 - 1 / 100) {
-                    $cellHighlight.addClass('label-default');
-                } else if (percentileValue > 5 / 6) {
-                    $cellHighlight.addClass('label-success');
-                } else if (percentileValue > 4 / 6) {
-                    $cellHighlight.addClass('label-primary');
-                } else if (percentileValue > 3 / 6 + 1 / 100) {
-                    $cellHighlight.addClass('label-info');
-                } else {
-                    // Do nothing
-                }
-                $cell.html($cellHighlight);
+            if (isNaN(parsedValue)) {
+                // Exit
+                callback();
+                return;
             }
+
+            // Calculate percentile value (there has to be a better way to do this..)
+            var percentileValue;
+            if (parsedValue < stats.averages[columnKey]) {
+                percentileValue = ((parsedValue - stats.minimums[columnKey]) / (stats.averages[columnKey] - stats.minimums[columnKey])) / 2;
+            } else if (parsedValue > stats.averages[columnKey]) {
+                percentileValue = ((parsedValue - stats.averages[columnKey]) / (stats.maximums[columnKey] - stats.averages[columnKey])) / 2 + 0.5;
+            } else {
+                percentileValue = 0.5;
+            }
+
+            // Invert the percentile, if this stat ranks in ascending order (as opposed to descending order)
+            if (statDefinitions[columnLabel] < 0) {
+                percentileValue = 1 - percentileValue;
+            }
+
+            // Apply highlights
+            var $cellHighlight = $('<span class="ysu label">' + unparsedValue + '</span>');
+            if (percentileValue < 1 / 6) {
+                $cellHighlight.addClass('label-danger');
+            } else if (percentileValue < 2 / 6) {
+                $cellHighlight.addClass('label-warning');
+            } else if (percentileValue < 3 / 6 - 0.5 / 6) {
+                $cellHighlight.addClass('label-default');
+            } else if (percentileValue > 5 / 6) {
+                $cellHighlight.addClass('label-success');
+            } else if (percentileValue > 4 / 6) {
+                $cellHighlight.addClass('label-primary');
+            } else if (percentileValue > 3 / 6 + 0.5 / 6) {
+                $cellHighlight.addClass('label-info');
+            } else {
+                // Do nothing
+            }
+            $cell.html($cellHighlight);
         }
 
+        // Exit
         callback();
         return;
+    }
+
+    /**
+     * Appends a row to a table.
+     * @param  {jQuery element} $table An HTML table element with jQuery wrapper.
+     * @return {jQuery element}        An HTML row element with jQuery wrapper.
+     */
+
+    function appendRow($table) {
+        console.log('appendRow()', arguments, $table.find('tbody>tr').length);
+
+        var $oldRow = $table.find('tbody>tr:last');
+        var $newRow = $oldRow.clone(true); //.attr('class', '');
+
+        $newRow.find('td').html('');
+        $newRow.insertAfter($oldRow);
+
+        return $newRow;
     }
 }
 
@@ -302,24 +367,6 @@ function parseNumber(unparsedNumber) {
 
     // return isNaN(parsedNumber) ? 0 : parsedNumber;
     return parsedNumber;
-}
-
-/**
- * Appends a row to a table.
- * @param  {jQuery element} $table An HTML table element with jQuery wrapper.
- * @return {jQuery element}        An HTML row element with jQuery wrapper.
- */
-
-function appendRow($table) {
-    console.log('appendRow()', arguments, $table.find('tbody>tr').length);
-
-    var $oldRow = $table.find('tbody>tr:last');
-    var $newRow = $oldRow.clone(true); //.attr('class', '');
-
-    $newRow.find('td').html('');
-    $newRow.insertAfter($oldRow);
-
-    return $newRow;
 }
 
 function addGlobalStyle(css) {

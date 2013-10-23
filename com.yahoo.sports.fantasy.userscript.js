@@ -7,13 +7,13 @@
 // @require  https://cdnjs.cloudflare.com/ajax/libs/jquery/2.0.3/jquery.min.js
 // @require  https://cdnjs.cloudflare.com/ajax/libs/lodash.js/2.2.1/lodash.js
 // @require  https://cdnjs.cloudflare.com/ajax/libs/async/1.22/async.min.js
+// @require  https://cdnjs.cloudflare.com/ajax/libs/URI.js/1.7.2/URI.min.js
 // @copyright  2012+, You
 // ==/UserScript==
 
-/* global console, _, async, $ */
+/* global console, _, async, $, URI */
 
 'use strict';
-
 
 var CSS = {
     BOOTSTRAPPER: {
@@ -26,27 +26,28 @@ var STAT_DEFINITIONS = {
     UTILS: {
         'O-Rank': -1,
         'Rank': -1,
-        'G': +1,
-        'A': +1,
-        '+/-': +1,
-        'PIM': +1,
-        'PPP': +1,
-        'SOG': +1,
-        'FW': +1,
-        'HIT': +1,
-        'BLK': +1
+        'Goals': +1,
+        'Assists': +1,
+        'Plus/Minus': +1,
+        'Penalty Minutes': +1,
+        'Powerplay Points': +1,
+        'Shots on Goal': +1,
+        'Faceoffs Won': +1,
+        'Hits': +1,
+        'Blocks': +1
     },
     GOALIES: {
         'O-Rank': -1,
         'Rank': -1,
-        'W': +1,
-        'GAA': -1,
-        'SV': +1,
-        'SA*': +1,
-        'SV%': +1,
-        'SHO': +1
+        'Wins': +1,
+        'Goals Against Average': -1,
+        'Saves': +1,
+        'Shots Against': +1,
+        'Save Percentage': +1,
+        'Shutouts': +1
     }
 };
+
 /**
  * Defines the target tables for stat-exentsions
  */
@@ -64,38 +65,17 @@ var targets = [
 ];
 
 
+$(window.top).load(function(e) {
+    // For debugging
+    var isFrameElement = !! frameElement;
+    var isTopWindow = window.top === window.self;
+    console.log('window.top.load()');
+    console.log('window.top.load()', window.top.location.href, arguments);
+    console.log('window.top.load()', window.self.location.href, isFrameElement ? frameElement.src : '', frames.length, isFrameElement, isTopWindow, $(e.target.documentElement).find('head title').text());
+    console.log('window.top.load()', URI(window.self.location.href).search(true).l, URI(window.self.location.href).search(true));
+});
 
-// YUI().use('event-base', function(Y) {
-//     console.log("YUI().use('event-base')", arguments);
-
-//     Y.on('domready', function() {
-//         console.log('domready')
-//     });
-
-//     Y.on('contentready', function() {
-//         console.log('contentready')
-//     });
-
-//     Y.on('available', function() {
-//         console.log('available')
-//     });
-// });
-
-// $(window.parent.document).ready(function() {
-//     console.log('$(window.parent.document).ready()', arguments);
-
-//tryLoading();
-// })
-// $(window.top.document).on('mousedown', function() {
-//     console.log('mousedown', arguments);
-
-//     var isPlayerNoteClick = $(arguments[0].target).filter('a.playernote').length > 0;
-//     if (isPlayerNoteClick) {
-//         $('body', window.parent.document).append('<div id="ysu-is-loaded" class="ysu"/>');
-//     }
-//     return true;
-// });
-
+var stateManager = new StateManager();
 tryLoading();
 
 function tryLoading() {
@@ -104,26 +84,22 @@ function tryLoading() {
     var hasTargets = (undefined !== _.find(targets, function(value, index, list) {
         return $(value.selector, window.parent.document).length > 0;
     }));
-    var hasAlreadyLoaded = $('#ysu-is-loaded', window.parent.document).length > 0;
-    // var isReady = hasTargets && !hasAlreadyLoaded;
-    // var isFrameElement = !! frameElement;
-    // var isTopWindow = window.top === window.self;
+    var hasAlreadyLoaded = stateManager.hasAlreadyLoaded();
+    var isNewsRequest = stateManager.isNewsRequest();
 
-    // console.log('tryLoading()', hasTargets, hasAlreadyLoaded, isFrameElement, isTopWindow);
+    console.log(hasTargets, hasAlreadyLoaded, isNewsRequest);
 
     if (hasTargets) {
-        if (hasAlreadyLoaded) {
-            $('body', window.parent.document).remove('#ysu-is-loaded');
+        if (hasAlreadyLoaded && isNewsRequest) {
+            // Ignore news requests
         } else {
             main();
+            stateManager.setLoaded();
         }
-        // $('body', window.parent.document).append('<div id="ysu-is-loaded" class="ysu"/>');
     } else {
         setTimeout(tryLoading, 5000);
     }
 }
-
-
 
 function main() {
     console.log('main()', arguments);
@@ -134,8 +110,6 @@ function main() {
     _.each(targets, function(target, index, list) {
         applyStatExtensions($(target.selector, window.parent.document), target.stats);
     });
-
-    console.log('main()', 'END');
 }
 
 
@@ -436,4 +410,34 @@ function ColumnManager(labels, $table) {
         this.index = index;
         this.key = label + index;
     }
+}
+
+function StateManager() {
+    var hasAlreadyLoaded = function() {
+        return $('#ysu-is-loaded', window.top.document).length > 0;
+    };
+    var setLoaded = function() {
+        if (!hasAlreadyLoaded()) {
+            $('body', window.top.document).append('<div id="ysu-is-loaded" class="ysu"/>');
+        }
+    };
+    var setUnloaded = function() {
+        $('body #ysu-is-loaded', window.top.document).remove();
+    };
+    var isNewsRequest = function() {
+        var newsRequests = ['n1FB', 'n2FB'];
+
+        return _.contains(newsRequests, URI(window.self.location.href).search(true).l);
+    };
+    var isPjaxRequest = function() {
+        return window.top === window.self;
+    };
+
+    return {
+        hasAlreadyLoaded: hasAlreadyLoaded,
+        setLoaded: setLoaded,
+        setUnloaded: setUnloaded,
+        isNewsRequest: isNewsRequest,
+        isPjaxRequest: isPjaxRequest
+    };
 }
